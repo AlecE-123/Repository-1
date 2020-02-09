@@ -1,0 +1,381 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
+
+```{r}
+#Load libraries
+
+library(tidyverse)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+```
+
+```{r}
+# Define filepaths for World Bank Data (Doing Business regulations)
+
+path1ALL <- "C:\\Users\\alece\\OneDrive\\Documents\\ASB Documents\\5. Introduction to R and Data Analytics (Prof Yen Teik)\\Project\\Initial Data\\World Bank_Doing Business Regulations_2019_ALL.xlsx"
+
+path2HIGH <- "C:\\Users\\alece\\OneDrive\\Documents\\ASB Documents\\5. Introduction to R and Data Analytics (Prof Yen Teik)\\Project\\Initial Data\\World Bank_Doing Business Regulations_2019_HIGH.xlsx"
+
+path3UPPMID <- "C:\\Users\\alece\\OneDrive\\Documents\\ASB Documents\\5. Introduction to R and Data Analytics (Prof Yen Teik)\\Project\\Initial Data\\World Bank_Doing Business Regulations_2019_UPPMID.xlsx"
+
+path4LOWMID <- "C:\\Users\\alece\\OneDrive\\Documents\\ASB Documents\\5. Introduction to R and Data Analytics (Prof Yen Teik)\\Project\\Initial Data\\World Bank_Doing Business Regulations_2019_LOWMID.xlsx"
+
+path5LOW <- "C:\\Users\\alece\\OneDrive\\Documents\\ASB Documents\\5. Introduction to R and Data Analytics (Prof Yen Teik)\\Project\\Initial Data\\World Bank_Doing Business Regulations_2019_LOW.xlsx"
+
+path6score <- "C:\\Users\\alece\\OneDrive\\Documents\\ASB Documents\\5. Introduction to R and Data Analytics (Prof Yen Teik)\\Project\\Initial Data\\World Bank_Country Score and Rank.xlsx"
+
+```
+
+
+```{r}
+#Import World Bank files and join data into single table with income group labelled
+
+table1 <- read_excel(path1ALL, sheet=1, col_names=TRUE)
+table2 <- read_excel(path2HIGH, sheet=1, col_names=TRUE)
+table3 <- read_excel(path3UPPMID, sheet=1, col_names=TRUE)
+table4 <- read_excel(path4LOWMID, sheet=1, col_names=TRUE)
+table5 <- read_excel(path5LOW, sheet=1, col_names=TRUE)
+table6 <- read_excel(path6score, sheet=1, col_names=TRUE)
+
+names(table1) <- str_replace_all(names(table1), c(" "="_"))
+names(table2) <- str_replace_all(names(table2), c(" "="_"))
+names(table3) <- str_replace_all(names(table3), c(" "="_"))
+names(table4) <- str_replace_all(names(table4), c(" "="_"))
+names(table5) <- str_replace_all(names(table5), c(" "="_"))
+names(table6) <- str_replace_all(names(table6), c(" "="_"))
+
+
+table2$IncomeGroup <- "High"
+table3$IncomeGroup <- "Upper_Middle"
+table4$IncomeGroup <- "Low_Middle"
+table5$IncomeGroup <- "Low"
+
+WorldBank_ALL <- rbind(table2, table3, table4, table5)
+str(WorldBank_ALL)
+
+WorldBank_ALL <- subset(WorldBank_ALL, select=c(1,2,14))
+table6 <- subset(table6, select=c(1,2))
+
+WorldBank_joined <- WorldBank_ALL %>%
+  inner_join(table6, by="Economy") %>%
+  rename(DB.Rank=globalRank, DB.Score= DB_2019)
+
+WorldBank_joined <- subset(WorldBank_joined, select=c(1,2,4,3))
+WorldBank_joined
+
+```
+
+
+```{r}
+# Import and arrange Global Innovation Index data
+
+pathGII <- "C:\\Users\\alece\\OneDrive\\Documents\\ASB Documents\\5. Introduction to R and Data Analytics (Prof Yen Teik)\\Project\\Initial Data\\Global Innovation Index 2019_Rank and Score.xlsx"
+
+GIIdata <- read_excel(pathGII, sheet=1, col_names=TRUE) 
+
+GIIdata <- subset(GIIdata, select=c(2,1,6))
+GIIdata <- GIIdata %>%
+  rename(Innovation.Rank = rank, Innovation.Score = Score)
+
+```
+
+
+```{r}
+#Import World Economic Forum data on Global Competitiveness Index
+
+pathWEF <- "C:\\Users\\alece\\OneDrive\\Documents\\ASB Documents\\5. Introduction to R and Data Analytics (Prof Yen Teik)\\Project\\Initial Data\\WEF_Global Comp Index_4.0_2019_Dataset.xlsx"
+
+WEFdata <- read_excel(pathWEF, sheet=6, col_names=TRUE)
+WEFdata
+
+WEFdata <- WEFdata %>%
+  rename(Economy= Attribute, Comp.Rank = RANK, Comp.Score = SCORE)
+WEFdata
+
+```
+
+```{r}
+#Display all tables
+WorldBank_joined
+GIIdata
+WEFdata
+
+```
+
+```{r}
+#First join (World Bank and GII) and check NA's to sync up country names
+jointdata1 <- WorldBank_joined %>%
+  full_join(GIIdata, by="Economy")
+jointdata1 %>%
+  filter(is.na(Innovation.Rank))
+
+#Second join (World Bank and WEF) and check NA's to sync up country names
+jointdata2 <- WorldBank_joined %>%
+  full_join(WEFdata, by="Economy")
+
+jointdata2 %>%
+  filter(is.na(Comp.Score))
+
+```
+
+
+```{r}
+#Join all tables now that all country names are synced
+
+dataset <- jointdata1 %>%
+  full_join(jointdata2, by="Economy") %>%
+  rename(DB.Rank = DB.Rank.x, DB.Score = DB.Score.x, IncomeGroupDetail=IncomeGroup.x)
+dataset <- subset(dataset, select=c(1,2,3,5,6,10,11,4))
+
+dataset$IncomeGroup <- ifelse(dataset$IncomeGroupDetail == ("Low_Middle"), "Middle", dataset$IncomeGroupDetail)
+dataset$IncomeGroup <- ifelse(dataset$IncomeGroup == ("Upper_Middle"), "Middle", dataset$IncomeGroup) 
+
+dataset
+
+#Create subtables based on income groups
+dataset_high <- dataset %>%
+  filter(IncomeGroup=="High")
+dataset_mid <- dataset %>%
+    filter(grepl("Middle", IncomeGroup))
+dataset_low <- dataset %>%
+  filter(IncomeGroup=="Low")
+
+
+dataset_high
+dataset_mid
+dataset_low
+```
+
+
+```{r}
+#General Plots - Doing Business Index vs. Innovation Index
+
+plot1.1 <- ggplot(data = dataset, aes(x=DB.Rank, y=Innovation.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE) + ggtitle("DB Index Rank vs. Innovation Index Rank")
+plot1.1
+correlation1.1 <- cor(dataset$DB.Rank, dataset$Innovation.Rank, use="na.or.complete")
+
+plot1.2 <- ggplot(data = dataset, aes(x=DB.Score, y=Innovation.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Score vs. Innovation Index Score")
+plot1.2
+correlation1.2 <- cor(dataset$DB.Score, dataset$Innovation.Score, use="na.or.complete")
+
+#General Plots - Doing Business Index vs. Competitiveness Index
+
+plot1.3 <- ggplot(data = dataset, aes(x=DB.Rank, y=Comp.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Rank vs. Competitiveness Index Rank")
+plot1.3
+correlation1.3 <- cor(dataset$DB.Rank, dataset$Comp.Rank, use="na.or.complete")
+
+plot1.4 <- ggplot(data = dataset, aes(x=DB.Score, y=Comp.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Score vs. Competitiveness Index Score") 
+plot1.4
+correlation1.4 <- cor(dataset$DB.Score, dataset$Comp.Score, use="na.or.complete")
+
+#General Plots - Innovation Index vs. Competitiveness Index
+
+plot1.5 <- ggplot(data = dataset, aes(x=Innovation.Rank, y=Comp.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("Innovation Index Rank vs. Competitiveness Index Rank")
+plot1.5
+correlation1.5 <- cor(dataset$Innovation.Rank, dataset$Comp.Rank, use="na.or.complete")
+
+plot1.6 <- ggplot(data = dataset, aes(x=Innovation.Score, y=Comp.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE) + ggtitle("Innovation Index Score vs. Competitiveness Index Score")
+plot1.6
+correlation1.6 <- cor(dataset$Innovation.Score, dataset$Comp.Score, use="na.or.complete")
+
+#Code chunk for adding labels to plots: +geom_text(aes(label=Economy), size=3)
+
+cor(dataset$DB.Score, dataset$Innovation.Score, use="na.or.complete")
+cor(dataset$DB.Score, dataset$Comp.Score, use="na.or.complete")
+cor(dataset$Comp.Score, dataset$Innovation.Score, use="na.or.complete")
+
+```
+
+
+```{r}
+#IncomeGroup Plots - Doing Business Index vs. Innovation Index
+
+plot2.1 <- ggplot(data = dataset, aes(x=DB.Rank, y=Innovation.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", se=FALSE, aes(color=IncomeGroup, group=IncomeGroup)) + geom_smooth(method="lm", se=FALSE, color="black")+ ggtitle("DB Index Rank vs. Innovation Index Rank")
+plot2.1
+correlation2.1 <- cor(dataset$DB.Rank, dataset$Innovation.Rank, use="na.or.complete")
+
+plot2.2 <- ggplot(data = dataset, aes(x=DB.Score, y=Innovation.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", se=FALSE, aes(color=IncomeGroup, group=IncomeGroup)) + geom_smooth(method="lm", se=FALSE, color="black")+ ggtitle("DB Index Score vs. Innovation Index Score")
+plot2.2
+correlation2.2 <- cor(dataset$DB.Score, dataset$Innovation.Score, use="na.or.complete")
+
+#IncomeGroup Plots - Doing Business Index vs. Competitiveness Index
+plot2.3 <- ggplot(data = dataset, aes(x=DB.Rank, y=Comp.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", se=FALSE, aes(color=IncomeGroup, group=IncomeGroup)) + geom_smooth(method="lm", se=FALSE, color="black")+ ggtitle("DB Index Rank vs. Competitiveness Index Rank")
+plot2.3
+correlation2.3 <- cor(dataset$DB.Rank, dataset$Comp.Rank, use="na.or.complete")
+
+plot2.4 <- ggplot(data = dataset, aes(x=DB.Score, y=Comp.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", se=FALSE, aes(color=IncomeGroup, group=IncomeGroup)) + geom_smooth(method="lm", se=FALSE, color="black")+ ggtitle("DB Index Score vs. Competitiveness Index Score")
+plot2.4
+correlation2.4 <- cor(dataset$DB.Score, dataset$Comp.Score, use="na.or.complete")
+
+#IncomeGroup Plots - Innovation Index vs. Competitiveness Index
+plot2.5 <- ggplot(data = dataset, aes(x=Innovation.Rank, y=Comp.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", se=FALSE, aes(color=IncomeGroup, group=IncomeGroup)) + geom_smooth(method="lm", se=FALSE, color="black")+ ggtitle("Innovation Index Rank vs. Competitiveness Index Rank")
+plot2.5
+correlation2.5 <- cor(dataset$Innovation.Rank, dataset$Comp.Rank, use="na.or.complete")
+
+plot2.6 <- ggplot(data = dataset, aes(x=Innovation.Score, y=Comp.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", se=FALSE, aes(color=IncomeGroup, group=IncomeGroup)) + geom_smooth(method="lm", se=FALSE, color="black")+ ggtitle("Innovation Index Score vs. Competitiveness Index Score")
+plot2.6
+correlation2.6 <- cor(dataset$Innovation.Score, dataset$Comp.Score, use="na.or.complete")
+```
+
+```{r}
+#Detailed Charts, Separated by Income Group - HIGH
+
+#DB Index vs. Innovation Index Rank
+Hplot1.1 <- ggplot(data = dataset_high, aes(x=DB.Rank, y=Innovation.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE) + ggtitle("DB Index Rank vs. Innovation Index Rank")
+Hplot1.1
+Hcorrelation1.1 <- cor(dataset_high$DB.Rank, dataset_high$Innovation.Rank, use="na.or.complete")
+
+Hplot1.2 <- ggplot(data = dataset_high, aes(x=DB.Score, y=Innovation.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Score vs. Innovation Index Score")
+Hplot1.2
+Hcorrelation1.2 <- cor(dataset_high$DB.Score, dataset_high$Innovation.Score, use="na.or.complete")
+
+#General Plots - Doing Business Index vs. Competitiveness Index
+
+Hplot1.3 <- ggplot(data = dataset_high, aes(x=DB.Rank, y=Comp.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Rank vs. Competitiveness Index Rank")
+Hplot1.3
+Hcorrelation1.3 <- cor(dataset_high$DB.Rank, dataset_high$Comp.Rank, use="na.or.complete")
+
+Hplot1.4 <- ggplot(data = dataset_high, aes(x=DB.Score, y=Comp.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Score vs. Competitiveness Index Score") 
+Hplot1.4
+Hcorrelation1.4 <- cor(dataset_high$DB.Score, dataset_high$Comp.Score, use="na.or.complete")
+
+#General Plots - Innovation Index vs. Competitiveness Index
+
+Hplot1.5 <- ggplot(data = dataset_high, aes(x=Innovation.Rank, y=Comp.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("Innovation Index Rank vs. Competitiveness Index Rank")
+Hplot1.5
+Hcorrelation1.5 <- cor(dataset_high$Innovation.Rank, dataset_high$Comp.Rank, use="na.or.complete")
+
+Hplot1.6 <- ggplot(data = dataset_high, aes(x=Innovation.Score, y=Comp.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE) + ggtitle("Innovation Index Score vs. Competitiveness Index Score")
+Hplot1.6
+Hcorrelation1.6 <- cor(dataset_high$Innovation.Score, dataset_high$Comp.Score, use="na.or.complete")
+
+```
+
+
+```{r}
+#Detailed Charts, Separated by Income Group - MIDDLE
+
+#DB Index vs. Innovation Index Rank
+Mplot1.1 <- ggplot(data = dataset_mid, aes(x=DB.Rank, y=Innovation.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE) + ggtitle("DB Index Rank vs. Innovation Index Rank")
+Mplot1.1
+Mcorrelation1.1 <- cor(dataset_mid$DB.Rank, dataset_mid$Innovation.Rank, use="na.or.complete")
+
+Mplot1.2 <- ggplot(data = dataset_mid, aes(x=DB.Score, y=Innovation.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Score vs. Innovation Index Score")
+Mplot1.2
+Mcorrelation1.2 <- cor(dataset_mid$DB.Score, dataset_mid$Innovation.Score, use="na.or.complete")
+
+#General Plots - Doing Business Index vs. Competitiveness Index
+
+Mplot1.3 <- ggplot(data = dataset_mid, aes(x=DB.Rank, y=Comp.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Rank vs. Competitiveness Index Rank")
+Mplot1.3
+Mcorrelation1.3 <- cor(dataset_mid$DB.Rank, dataset_mid$Comp.Rank, use="na.or.complete")
+
+Mplot1.4 <- ggplot(data = dataset_mid, aes(x=DB.Score, y=Comp.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Score vs. Competitiveness Index Score") 
+Mplot1.4
+Mcorrelation1.4 <- cor(dataset_mid$DB.Score, dataset_mid$Comp.Score, use="na.or.complete")
+
+#General Plots - Innovation Index vs. Competitiveness Index
+
+Mplot1.5 <- ggplot(data = dataset_mid, aes(x=Innovation.Rank, y=Comp.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("Innovation Index Rank vs. Competitiveness Index Rank")
+Mplot1.5
+Mcorrelation1.5 <- cor(dataset_mid$Innovation.Rank, dataset_mid$Comp.Rank, use="na.or.complete")
+
+Mplot1.6 <- ggplot(data = dataset_mid, aes(x=Innovation.Score, y=Comp.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE) + ggtitle("Innovation Index Score vs. Competitiveness Index Score")
+Mplot1.6
+Mcorrelation1.6 <- cor(dataset_mid$Innovation.Score, dataset_mid$Comp.Score, use="na.or.complete")
+```
+
+
+```{r}
+#Detailed Charts, Separated by Income Group - LOW
+
+#DB Index vs. Innovation Index Rank
+Lplot1.1 <- ggplot(data = dataset_low, aes(x=DB.Rank, y=Innovation.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE) + ggtitle("DB Index Rank vs. Innovation Index Rank")
+Lplot1.1
+Lcorrelation1.1 <- cor(dataset_low$DB.Rank, dataset_low$Innovation.Rank, use="na.or.complete")
+
+Lplot1.2 <- ggplot(data = dataset_low, aes(x=DB.Score, y=Innovation.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Score vs. Innovation Index Score")
+Lplot1.2
+Lcorrelation1.2 <- cor(dataset_low$DB.Score, dataset_low$Innovation.Score, use="na.or.complete")
+
+#General Plots - Doing Business Index vs. Competitiveness Index
+
+Lplot1.3 <- ggplot(data = dataset_low, aes(x=DB.Rank, y=Comp.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Rank vs. Competitiveness Index Rank")
+Lplot1.3
+Lcorrelation1.3 <- cor(dataset_low$DB.Rank, dataset_low$Comp.Rank, use="na.or.complete")
+
+Lplot1.4 <- ggplot(data = dataset_low, aes(x=DB.Score, y=Comp.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Score vs. Competitiveness Index Score") 
+Lplot1.4
+Lcorrelation1.4 <- cor(dataset_low$DB.Score, dataset_low$Comp.Score, use="na.or.complete")
+
+#General Plots - Innovation Index vs. Competitiveness Index
+
+Lplot1.5 <- ggplot(data = dataset_low, aes(x=Innovation.Rank, y=Comp.Rank)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("Innovation Index Rank vs. Competitiveness Index Rank")
+Lplot1.5
+Lcorrelation1.5 <- cor(dataset_low$Innovation.Rank, dataset_low$Comp.Rank, use="na.or.complete")
+
+Lplot1.6 <- ggplot(data = dataset_low, aes(x=Innovation.Score, y=Comp.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE) + ggtitle("Innovation Index Score vs. Competitiveness Index Score")
+Lplot1.6
+Lcorrelation1.6 <- cor(dataset_low$Innovation.Score, dataset_low$Comp.Score, use="na.or.complete")
+```
+
+```{r}
+#Summary of Correlation Statistics
+
+Comparison <- c("Doing Business Rank vs. Innovation Index Rank", "Doing Business Score vs. Innovation Index Score", "Doing Business Rank vs. Competitiveness Rank", "Doing Business Score vs. Competitiveness Score", "Innovation Index Rank vs. Competitiveness Rank", "Innovation Index Score vs. Competitiveness Score")
+All <- round(c(correlation1.1, correlation1.2, correlation1.3, correlation1.4, correlation1.5, correlation1.6), 2)
+High_Inc<- round(c(Hcorrelation1.1, Hcorrelation1.2, Hcorrelation1.3, Hcorrelation1.4, Hcorrelation1.5, Hcorrelation1.6), 2)
+Middle_Inc<- round(c(Mcorrelation1.1, Mcorrelation1.2, Mcorrelation1.3, Mcorrelation1.4, Mcorrelation1.5, Mcorrelation1.6),2)
+Low_Inc<- round(c(Lcorrelation1.1, Lcorrelation1.2, Lcorrelation1.3, Lcorrelation1.4, Lcorrelation1.5, Lcorrelation1.6), 2)
+
+correlationSummary <- data.frame(Comparison, All, High_Inc, Middle_Inc, Low_Inc)
+correlationSummary
+
+correlationSummary_melted <- melt(correlationSummary, id.vars="Comparison")
+correlationSummary_melted <- correlationSummary_melted %>%
+  rename(Income_Group=variable, Correlation=value)
+
+Income_Group_Names <- c(paste("All \n n=", count(dataset)), paste("High_Inc \n n=", count(dataset_high)), paste("Mid_Inc \n n=", count(dataset_mid)), paste("Low_Inc \n n=", count(dataset_low)))
+Income_Group_Names
+
+
+ggplot(correlationSummary_melted[c(1,3,5,7,9,11,13,15,17,19,21,23),], aes(x=Income_Group, y=Correlation, fill=Comparison)) + geom_bar(width = 0.75, position="dodge", stat="identity") + geom_text(aes(x=Income_Group, y=Correlation, label=Correlation), position=position_dodge(width=0.75), vjust=-0.25) + scale_x_discrete(labels=Income_Group_Names)
+
+ggplot(correlationSummary_melted[c(2,4,6,8,10,12,14,16,18,20,22,24),], aes(x=Income_Group, y=Correlation, fill=Comparison)) + geom_bar(width = 0.75, position="dodge", stat="identity") + geom_text(aes(x=Income_Group, y=Correlation, label=Correlation), position=position_dodge(width=.5), vjust=-0.25) + scale_x_discrete(labels=Income_Group_Names)
+
+```
+
+
+```{r}
+# Analysis Focus - Identifying Target Countries with Labels
+
+
+#General Plots - Doing Business Index vs. Innovation Index
+plot1.2 <- ggplot(data = dataset, aes(x=DB.Score, y=Innovation.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE)+ ggtitle("DB Index Score vs. Innovation Index Score") + geom_text(aes(label=Economy), size=1.8)
+plot1.2
+
+plot1.6 <- ggplot(data = dataset, aes(x=Innovation.Score, y=Comp.Score)) + geom_point(aes(color=IncomeGroup)) +geom_smooth(method="lm", col="black", se=FALSE) + ggtitle("Innovation Index Score vs. Competitiveness Index Score") + geom_text(aes(label=Economy), size=1.8)
+plot1.6
+
+#Code chunk for adding labels to plots: +geom_text(aes(label=Economy), size=3)
+
+
+```
+
